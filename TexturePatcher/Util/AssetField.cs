@@ -1,7 +1,6 @@
 using AssetsTools.NET;
 
-// อ่านค่าจาก AssetTypeValueField แบบปลอดภัย (คืนค่า default ถ้า field ไม่มีหรืออ่านไม่ได้)
-// ทุกคำสั่งที่ไล่ SpriteRenderer/Sprite/Texture2D ใช้กลุ่มนี้ร่วมกัน
+// อ่านค่า AssetTypeValueField แบบปลอดภัย
 static class AssetField
 {
     public static float SafeF(AssetTypeValueField f, float d = 0f)

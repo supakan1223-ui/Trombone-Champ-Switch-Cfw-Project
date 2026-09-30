@@ -1,4 +1,9 @@
+using AssetsTools.NET;
 using AssetsTools.NET.Extra;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
 
 static class ListCommand
 {
@@ -21,23 +26,23 @@ static class ListCommand
             try
             {
                 var afileInst = manager.LoadAssetsFileFromBundle(bunInst, assetsFileIndex, false);
-                if (afileInst != null)
+                if (afileInst == null)
                 {
-                    foreach (var texInfo in afileInst.file.GetAssetsOfType(AssetClassID.Texture2D))
-                    {
-                        var texBase = manager.GetBaseField(afileInst, texInfo);
-                        string name = texBase["m_Name"].AsString;
-                        int width = texBase["m_Width"].AsInt;
-                        int height = texBase["m_Height"].AsInt;
-                        int format = texBase["m_TextureFormat"].AsInt;
-                        Console.WriteLine($"  {name} | {width}x{height} | TextureFormat={format} | PathID={texInfo.PathId}");
-                    }
+                    assetsFileIndex++;
+                    continue;
+                }
+
+                foreach (var texInfo in afileInst.file.GetAssetsOfType(AssetClassID.Texture2D))
+                {
+                    var texBase = manager.GetBaseField(afileInst, texInfo);
+                    string name = texBase["m_Name"].AsString;
+                    int width = texBase["m_Width"].AsInt;
+                    int height = texBase["m_Height"].AsInt;
+                    int format = texBase["m_TextureFormat"].AsInt;
+                    Console.WriteLine($"  {name} | {width}x{height} | TextureFormat={format} | PathID={texInfo.PathId}");
                 }
             }
-            catch
-            {
-                // Some bundle entries are resource files rather than serialized AssetsFiles.
-            }
+            catch { }
 
             assetsFileIndex++;
         }

@@ -2,11 +2,9 @@ using AssetsTools.NET;
 using AssetsTools.NET.Extra;
 using static AssetField;
 
-// ทุกอย่างที่เกี่ยวกับ "หา Texture2D ตามชื่อ" + "อ่าน/เขียน raw texture bytes ใน .resS"
-// เดิมโค้ดชุดนี้ถูกเขียนซ้ำคำต่อคำใน PatchBundle, LoadTextureImage, PatchTargetTextureRaw
+// ทุกอย่างที่เกี่ยวกับ Texture2D และ raw texture bytes ใน .resS
 static class BundleTextureIO
 {
-    // ผลการค้นหา Texture2D 1 ตัว พร้อมข้อมูลตำแหน่งใน .resS ที่ต้องใช้ patch/decode
     public sealed record TextureHandle(
         AssetsFileInstance AssetsFile,
         AssetFileInfo Info,
@@ -14,19 +12,17 @@ static class BundleTextureIO
         int Width, int Height, int Format, int MipCount,
         uint Offset, uint Size, string ResourceName);
 
-    // ไล่ทุก assets file ใน bundle หา Texture2D ที่ชื่อ name ตรงเป๊ะ (Ordinal)
-    // loadAssetsFile ให้ผู้เรียกส่งเข้ามาเอง เพราะ bunInst (จาก manager.LoadBundleFile) ไม่มีชื่อ type ที่ตายตัวในสโคปนี้
     public static TextureHandle? FindTexture2D(
         AssetsManager manager,
-        AssetBundleFile bun,
-        Func<int, AssetsFileInstance?> loadAssetsFile,
+        BundleFileInstance bunInst,
         string textureName)
     {
         int idx = 0;
-        while (idx < bun.GetAllFileNames().Count)
+        while (idx < bunInst.file.GetAllFileNames().Count)
         {
             AssetsFileInstance? afile = null;
-            try { afile = loadAssetsFile(idx); } catch { }
+            try { afile = manager.LoadAssetsFileFromBundle(bunInst, idx, false); }
+            catch { }
             idx++;
             if (afile == null) continue;
 
@@ -52,8 +48,8 @@ static class BundleTextureIO
         return null;
     }
 
-    // หา directory entry ใน bundle ที่ชื่อตรงกับ resourceName (เผื่อ path มี prefix ต่างกัน จึงเช็ค EndsWith ด้วย)
-    public static AssetBundleDirectoryInfo ResolveResourceDirectory(AssetBundleFile bun, string resourceName)
+    public static AssetBundleDirectoryInfo ResolveResourceDirectory(
+        AssetBundleFile bun, string resourceName)
     {
         var dir = bun.BlockAndDirInfo.DirectoryInfos
             .FirstOrDefault(d => string.Equals(d.Name, resourceName, StringComparison.Ordinal));
@@ -61,28 +57,40 @@ static class BundleTextureIO
         dir ??= bun.BlockAndDirInfo.DirectoryInfos
             .FirstOrDefault(d => d.Name.EndsWith(resourceName, StringComparison.Ordinal));
 
-        return dir ?? throw new InvalidOperationException($"ไม่พบ resource entry '{resourceName}' ใน AssetBundle");
+        return dir ?? throw new InvalidOperationException(
+            $"ไม่พบ resource entry '{resourceName}' ใน AssetBundle");
     }
 
-    public static byte[] ReadBundleDirectoryBytes(AssetBundleFile bundle, AssetBundleDirectoryInfo dir)
+    public static byte[] ReadBundleDirectoryBytes(
+        AssetBundleFile bundle,
+        AssetBundleDirectoryInfo dir)
     {
         if (dir.Replacer != null)
-            throw new InvalidOperationException($"Resource '{dir.Name}' มี Replacer อยู่ก่อนแล้ว");
+            throw new InvalidOperationException(
+                $"Resource '{dir.Name}' มี Replacer อยู่ก่อนแล้ว");
 
         bundle.DataReader.Position = dir.Offset;
         byte[] data = new byte[checked((int)dir.DecompressedSize)];
+
         int total = 0;
         while (total < data.Length)
         {
-            int read = bundle.DataReader.BaseStream.Read(data, total, data.Length - total);
-            if (read <= 0) throw new EndOfStreamException($"อ่าน resource '{dir.Name}' ไม่ครบ");
+            int read = bundle.DataReader.BaseStream.Read(
+                data, total, data.Length - total);
+
+            if (read <= 0)
+                throw new EndOfStreamException(
+                    $"อ่าน resource '{dir.Name}' ไม่ครบ");
+
             total += read;
         }
+
         return data;
     }
 
-    // อ่าน raw compressed bytes (DXT1/DXT5) ของ texture ตรงๆ จาก .resS ยังไม่ decode เป็นภาพ
-    public static byte[] ReadTextureRaw(AssetBundleFile bun, TextureHandle tex)
+    public static byte[] ReadTextureRaw(
+        AssetBundleFile bun,
+        TextureHandle tex)
     {
         var resourceDir = ResolveResourceDirectory(bun, tex.ResourceName);
         byte[] resourceBytes = ReadBundleDirectoryBytes(bun, resourceDir);
@@ -91,34 +99,13 @@ static class BundleTextureIO
             throw new InvalidOperationException("Texture range เกิน resource");
 
         byte[] raw = new byte[tex.Size];
-        Buffer.BlockCopy(resourceBytes, checked((int)tex.Offset), raw, 0, checked((int)tex.Size));
+        Buffer.BlockCopy(
+            resourceBytes,
+            checked((int)tex.Offset),
+            raw,
+            0,
+            checked((int)tex.Size));
+
         return raw;
-    }
-
-    // แก้ raw compressed bytes ของ texture ตรงๆ ใน .resS (encoded.Length ต้องเท่ากับ tex.Size เป๊ะ)
-    public static void WriteTextureRaw(AssetBundleFile bun, TextureHandle tex, byte[] encoded)
-    {
-        if (encoded.LongLength != tex.Size)
-            throw new InvalidOperationException(
-                $"ขนาด encoded ไม่ตรง: ได้ {encoded.Length:N0}, ต้องการ {tex.Size:N0}");
-
-        var resourceDir = ResolveResourceDirectory(bun, tex.ResourceName);
-
-        if ((long)tex.Offset + tex.Size > resourceDir.DecompressedSize)
-            throw new InvalidOperationException(
-                $"Texture range เกิน resource: offset={tex.Offset}, size={tex.Size}, resourceSize={resourceDir.DecompressedSize}");
-
-        byte[] resourceBytes = ReadBundleDirectoryBytes(bun, resourceDir);
-        Buffer.BlockCopy(encoded, 0, resourceBytes, checked((int)tex.Offset), encoded.Length);
-        resourceDir.Replacer = new ContentReplacerFromBuffer(resourceBytes);
-
-        Console.WriteLine($"  patched: {tex.ResourceName} @ {tex.Offset:N0} + {tex.Size:N0}");
-    }
-
-    public static void WriteBundle(AssetBundleFile bun, string outputPath)
-    {
-        if (File.Exists(outputPath)) File.Delete(outputPath);
-        using var writer = new AssetsFileWriter(outputPath);
-        bun.Write(writer);
     }
 }
