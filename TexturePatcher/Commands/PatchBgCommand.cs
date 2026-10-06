@@ -19,7 +19,7 @@ static class PatchBgCommand
 
         string ext = Path.GetExtension(imagePath).ToLowerInvariant();
 
-        if (ext != ".png" && ext != ".trombackground" && ext != ".tromb")
+        if (ext != ".png" && ext != ".trombackground" && ext != ".tromb" && ext != ".jpg" && ext != ".jpeg")
             throw new InvalidOperationException(
                 "patchbg รองรับ Background เป็น .png, .trombackground หรือ .tromb เท่านั้น");
 
@@ -185,7 +185,7 @@ static class PatchBgCommand
 
                 byte[] encoded;
 
-                if (ext == ".png")
+                if (ext == ".png" || ext == ".jpg" || ext == ".jpeg")
                 {
                     encoded =
                         TextureCodec.EncodeBackgroundTexture(

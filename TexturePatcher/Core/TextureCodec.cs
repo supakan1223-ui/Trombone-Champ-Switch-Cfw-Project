@@ -4,6 +4,7 @@ using BCnEncoder.Shared;
 using SixLabors.ImageSharp;
 using SixLabors.ImageSharp.PixelFormats;
 using SixLabors.ImageSharp.Processing;
+using BCnEncoder.ImageSharp;
 
 // แปลง PNG เป็น raw DXT bytes ตาม TextureFormat ของ Unity
 static class TextureCodec
